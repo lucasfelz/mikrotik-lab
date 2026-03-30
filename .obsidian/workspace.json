@@ -1,0 +1,193 @@
+{
+  "main": {
+    "id": "7e33cd045af5322a",
+    "type": "split",
+    "children": [
+      {
+        "id": "650f949e1da3d596",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "1b44907e133c5db0",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "01 Curso Completo Mikrotik - Básico ao Avançado/Primeiros Passos.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Primeiros Passos"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "90f1b1ed6db62487",
+    "type": "split",
+    "children": [
+      {
+        "id": "8680d32179372b13",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "b43606e68c492cb2",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "ae4bfe3c44d5279f",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "a1e45aefc74f14a9",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "2da76deb17223d2e",
+    "type": "split",
+    "children": [
+      {
+        "id": "27b566e96a165a5e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "516002f8e3719b4b",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "01 Curso Completo Mikrotik - Básico ao Avançado/Primeiros Passos.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Primeiros Passos"
+            }
+          },
+          {
+            "id": "a172886659f330e9",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "01 Curso Completo Mikrotik - Básico ao Avançado/Primeiros Passos.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Primeiros Passos"
+            }
+          },
+          {
+            "id": "7f1db62590357760",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "969a8ddb721c835a",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "42c68faccd773087",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "01 Curso Completo Mikrotik - Básico ao Avançado/Primeiros Passos.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Primeiros Passos"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "1b44907e133c5db0",
+  "lastOpenFiles": [
+    "README.md~",
+    "README.md",
+    "01 Curso Completo Mikrotik - Básico ao Avançado/Primeiros Passos.md",
+    "01 Curso Completo Mikrotik - Básico ao Avançado"
+  ]
+}

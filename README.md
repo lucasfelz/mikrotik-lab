@@ -8,13 +8,14 @@
 
 1. [Visão Geral do Ambiente](#1-visão-geral-do-ambiente)
 2. [Download do MikroTik CHR](#2-download-do-mikrotik-chr)
-3. [Configuração da Bridge no Proxmox](#3-configuração-da-bridge-no-proxmox)
+3. [Configuração das Bridges no Proxmox](#3-configuração-das-bridges-no-proxmox)
 4. [Criação da VM no Proxmox](#4-criação-da-vm-no-proxmox)
 5. [Configuração de Rede no MikroTik](#5-configuração-de-rede-no-mikrotik)
 6. [Verificação Final](#6-verificação-final)
 7. [Topologia do Lab](#7-topologia-do-lab)
 8. [Problemas Conhecidos e Soluções](#8-problemas-conhecidos-e-soluções)
 9. [Próximos Passos — MTCNA](#9-próximos-passos--mtcna)
+10. [Histórico de Alterações](#10-histórico-de-alterações)
 
 ---
 
@@ -33,7 +34,12 @@
 
 ### Objetivo
 
-Criar um lab para estudo do MikroTik CHR voltado à certificação MTCNA. O CHR tem **uma única interface** (`ether3`) conectada à `vmbr2` (rede doméstica), com IP fixo `192.168.10.200`. O acesso do Arch via WinBox é direto pela rede doméstica — sem bridges isoladas, sem rotas estáticas adicionais.
+Criar um lab para estudo do MikroTik CHR voltado à certificação MTCNA e uso no dia a dia de NOC. O CHR tem **duas interfaces**:
+
+- `ether1` → `vmbr2` — WAN · rede doméstica · IP fixo `192.168.10.200` · acesso WinBox e internet
+- `ether2` → `vmbr99` — LAN · rede isolada de lab `10.99.0.0/24` · sem uplink físico
+
+Esse setup replica o padrão ensinado nos cursos MikroTik — internet na ether1, clientes na ether2.
 
 ### Por que CHR e não ISO?
 
@@ -59,15 +65,26 @@ scp ~/Downloads/chr-7.20.8.vmdk root@192.168.10.2:/tmp/
 
 ---
 
-## 3. Configuração da Bridge no Proxmox
+## 3. Configuração das Bridges no Proxmox
 
-O CHR usa a `vmbr2` — bridge com uplink físico na rede doméstica. Verificar se já existe:
+O CHR usa duas bridges:
+
+| Bridge | Tipo | Função |
+|--------|------|--------|
+| `vmbr2` | Com uplink físico | WAN — rede doméstica `192.168.10.0/24` |
+| `vmbr99` | Sem uplink físico | LAN — rede isolada de lab `10.99.0.0/24` |
+
+### Verificar se as bridges já existem
 
 ```bash
-cat /etc/network/interfaces | grep vmbr2
+cat /etc/network/interfaces
 ```
 
-Se não existir, adicionar ao final do arquivo `/etc/network/interfaces`:
+### Criar vmbr2 (se não existir)
+
+```bash
+nano /etc/network/interfaces
+```
 
 ```
 auto vmbr2
@@ -77,12 +94,31 @@ iface vmbr2 inet manual
     bridge-fd 0
 ```
 
-> Substituir `<nome_da_interface_fisica>` pela NIC física do Proxmox destinada à rede doméstica (ex: `enp3s0`). Verificar com `ip link show`.
+> Substituir `<nome_da_interface_fisica>` pela NIC física do Proxmox na rede doméstica. Verificar com `ip link show`.
+
+### Criar vmbr99 (rede isolada de lab)
+
+```
+auto vmbr99
+iface vmbr99 inet static
+    address 10.99.0.254/24
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+    comment "Lab MikroTik isolado"
+```
 
 Aplicar:
 
 ```bash
 ifreload -a
+```
+
+Verificar:
+
+```bash
+ip addr show vmbr2
+ip addr show vmbr99
 ```
 
 ---
@@ -98,9 +134,14 @@ qm create 202 \
   --cores 2 \
   --cpu host \
   --net0 virtio,bridge=vmbr2 \
+  --net1 virtio,bridge=vmbr99 \
   --ostype l26 \
   --machine pc-i440fx-8.1
 ```
+
+> **Ordem das bridges:**
+> - `--net0` → `vmbr2` (WAN) → aparece como `ether1` no CHR após renomear
+> - `--net1` → `vmbr99` (LAN) → aparece como `ether2` no CHR após renomear
 
 ### Importar o disco
 
@@ -137,6 +178,7 @@ machine: pc-i440fx-8.1
 memory: 512
 name: mikrotik-chr
 net0: virtio=BC:24:11:xx:xx:xx,bridge=vmbr2
+net1: virtio=BC:24:11:xx:xx:xx,bridge=vmbr99
 ostype: l26
 virtio0: local-lvm:vm-202-disk-0,size=128M
 ```
@@ -163,7 +205,7 @@ O RouterOS 7.x exige definição de senha no primeiro acesso:
 
 ## 5. Configuração de Rede no MikroTik
 
-Todos os comandos são executados no console do CHR (via `qm terminal` ou diretamente no console do Proxmox).
+Todos os comandos são executados no console do CHR (via `qm terminal` ou painel web do Proxmox).
 
 ### Verificar interfaces disponíveis
 
@@ -171,33 +213,39 @@ Todos os comandos são executados no console do CHR (via `qm terminal` ou direta
 /interface print
 ```
 
-Resultado esperado:
-
-```
-# NAME    TYPE      ACTUAL-MTU  MAC-ADDRESS
-0 ether3  ether     1500        BC:24:11:xx:xx:xx   ← vmbr2 (rede doméstica)
-1 lo      loopback  65536       00:00:00:00:00:00
-```
-
-> **Por que ether3 e não ether1?**
-> O RouterOS numera interfaces sequencialmente sem reutilizar IDs removidos. Se a VM teve interfaces recriadas durante configuração, a numeração continua de onde parou. Normal, não afeta o funcionamento.
-
-### Configurar IP fixo
+As interfaces podem aparecer com numeração diferente de `ether1/ether2` dependendo do histórico da VM. Renomear para o padrão dos cursos:
 
 ```bash
-/ip address add address=192.168.10.200/24 interface=ether3
+/interface set 0 name=ether1
+/interface set 1 name=ether2
 ```
 
-### Configurar rota padrão
+Verificar:
 
 ```bash
+/interface print
+# ether1 → vmbr2 (WAN)
+# ether2 → vmbr99 (LAN)
+```
+
+### Configurar WAN (ether1)
+
+```bash
+# IP fixo na rede doméstica
+/ip address add address=192.168.10.200/24 interface=ether1
+
+# Rota padrão via pfSense
 /ip route add dst-address=0.0.0.0/0 gateway=192.168.10.1 distance=1
+
+# DNS
+/ip dns set servers=8.8.8.8,1.1.1.1
 ```
 
-### Configurar DNS
+### Configurar LAN (ether2)
 
 ```bash
-/ip dns set servers=8.8.8.8,1.1.1.1
+# IP fixo na rede de lab
+/ip address add address=10.99.0.1/24 interface=ether2
 ```
 
 ### Verificar configuração completa
@@ -212,7 +260,8 @@ Output esperado do `/ip address print`:
 
 ```
 # ADDRESS              NETWORK        INTERFACE
-0 192.168.10.200/24    192.168.10.0   ether3
+0 192.168.10.200/24    192.168.10.0   ether1
+1 10.99.0.1/24         10.99.0.0      ether2
 ```
 
 Output esperado do `/ip route print`:
@@ -220,7 +269,8 @@ Output esperado do `/ip route print`:
 ```
 #    DST-ADDRESS       GATEWAY         DISTANCE
 0 As 0.0.0.0/0        192.168.10.1    1
-  DAc 192.168.10.0/24  ether3          0
+  DAc 192.168.10.0/24  ether1          0
+  DAc 10.99.0.0/24     ether2          0
 ```
 
 ### Testar conectividade e DNS
@@ -230,8 +280,6 @@ Output esperado do `/ip route print`:
 /resolve www.mikrotik.com
 /system package update check-for-updates
 ```
-
-O `check-for-updates` deve retornar a versão disponível sem erro de DNS.
 
 ### Configurações iniciais recomendadas
 
@@ -259,8 +307,8 @@ O `check-for-updates` deve retornar a versão disponível sem erro de DNS.
 ### Do Arch
 
 ```bash
+# Ping na WAN do CHR
 ping 192.168.10.200
-# Deve responder sem Redirect Host
 ```
 
 ### Do CHR
@@ -300,18 +348,21 @@ LAN: 192.168.10.1
         |
 [Proxmox] — PC físico
 192.168.10.2
-  vmbr2 → uplink físico (rede doméstica 192.168.10.0/24)
+  vmbr2  → uplink físico (rede doméstica 192.168.10.0/24)
+  vmbr99 → bridge isolada, sem uplink (rede de lab 10.99.0.0/24)
         |
-        |── net0 → vmbr2
-                        |
-                [MikroTik CHR — VM 202]
-                RouterOS 7.20.8
-                ether3: 192.168.10.200/24
-                gateway: 192.168.10.1 (pfSense)
-                DNS: 8.8.8.8, 1.1.1.1
+        |── net0 → vmbr2  (WAN) ──────────────────┐
+        |── net1 → vmbr99 (LAN) ──────────────────┤
+                                                   |
+                                       [MikroTik CHR — VM 202]
+                                       RouterOS 7.20.8
+                                       ether1: 192.168.10.200/24 (WAN)
+                                       ether2: 10.99.0.1/24 (LAN)
+                                       gateway: 192.168.10.1 (pfSense)
+                                       DNS: 8.8.8.8, 1.1.1.1
 
 Acesso WinBox do Arch:
-  192.168.10.200 — direto pela rede doméstica, sem rota estática
+  192.168.10.200 — direto pela rede doméstica
 ```
 
 ---
@@ -329,15 +380,12 @@ status: ERROR: could not resolve dns name (timeout)
 
 **Solução:**
 ```bash
-# Confirmar DNS
 /ip dns set servers=8.8.8.8,1.1.1.1
 
-# Confirmar rota padrão — deve existir linha com "As" e 0.0.0.0/0
 /ip route print
-# Se ausente:
+# Se não houver 0.0.0.0/0:
 /ip route add dst-address=0.0.0.0/0 gateway=192.168.10.1
 
-# Testar
 /ping 8.8.8.8 count=4
 /resolve www.mikrotik.com
 ```
@@ -348,13 +396,11 @@ status: ERROR: could not resolve dns name (timeout)
 
 **Sintoma:** Log mostra `logged out` seguido imediatamente de `logged in` em loop.
 
-**Causa:** `inactivity-timeout` padrão é `10m`. O WinBox perde keepalive e reconecta automaticamente.
+**Causa:** `inactivity-timeout` padrão é `10m`.
 
 **Solução:**
 ```bash
 /user set admin inactivity-timeout=1h
-
-# Verificar
 /user print detail
 ```
 
@@ -376,15 +422,15 @@ Para ver parâmetros disponíveis em qualquer comando:
 
 ---
 
-### Interfaces aparecem como ether3 em vez de ether1
+### Interfaces aparecem com numeração inesperada (ex: ether3, ether4)
 
-**Causa:** Normal. O RouterOS numera sequencialmente sem reutilizar IDs removidos. Basta usar o nome real mostrado em `/interface print`.
+**Causa:** O RouterOS numera interfaces sequencialmente sem reutilizar IDs de interfaces removidas. Renomear conforme seção 5.
 
 ---
 
 ## 9. Próximos Passos — MTCNA
 
-Seguir os módulos da apostila Opentech na ordem. **Sempre fazer backup antes de cada lab:**
+Seguir o curso na ordem dos módulos. **Sempre fazer backup antes de cada lab:**
 
 ```bash
 /system backup save name=antes-lab-X
@@ -393,47 +439,36 @@ Seguir os módulos da apostila Opentech na ordem. **Sempre fazer backup antes de
 ### Módulo 1 — Introdução ao RouterOS
 
 ```bash
-# Identidade
 /system identity set name=CHR-Lab
-
-# Usuários
 /user print detail
 /user add name=ops group=full password=Senha@Lab123
 /user set admin inactivity-timeout=1h
 /user set ops inactivity-timeout=1h
-
-# Serviços
 /ip service print
 /ip service disable telnet,ftp,www
-
-# Backup
 /system backup save name=lab-m1
 /export file=lab-m1-export
-/file print
 ```
 
 ### Módulo 2 — DHCP
 
-> Para praticar DHCP server é necessário ter clientes na mesma rede. No setup atual o CHR está na rede doméstica — use a `ether3` como servidor DHCP apenas em ambiente de teste controlado ou adicione uma segunda interface isolada futuramente.
-
 ```bash
-# Pool
-/ip pool add name=pool-lab ranges=192.168.10.210-192.168.10.250
+# Pool para a LAN
+/ip pool add name=pool-lan ranges=10.99.0.100-10.99.0.200
 
-# Rede
+# Rede DHCP
 /ip dhcp-server network add \
-  address=192.168.10.0/24 \
-  gateway=192.168.10.200 \
+  address=10.99.0.0/24 \
+  gateway=10.99.0.1 \
   dns-server=8.8.8.8
 
-# Servidor
+# Servidor na LAN
 /ip dhcp-server add \
-  name=dhcp-lab \
-  interface=ether3 \
-  address-pool=pool-lab \
+  name=dhcp-lan \
+  interface=ether2 \
+  address-pool=pool-lan \
   disabled=no
 
-# Verificar
 /ip dhcp-server print
 /ip dhcp-server lease print
 ```
@@ -441,35 +476,20 @@ Seguir os módulos da apostila Opentech na ordem. **Sempre fazer backup antes de
 ### Módulo 3 — Bridging
 
 ```bash
-# Criar bridge
-/interface bridge add name=br-lab
-
-# Adicionar porta
-/interface bridge port add bridge=br-lab interface=ether3
-
-# Mover IP para a bridge
-/ip address remove [find interface=ether3]
-/ip address add address=192.168.10.200/24 interface=br-lab
-
-# Verificar
+/interface bridge add name=br-lan
+/interface bridge port add bridge=br-lan interface=ether2
+/ip address remove [find interface=ether2]
+/ip address add address=10.99.0.1/24 interface=br-lan
 /interface bridge print
 /interface bridge port print
-/ip address print
 ```
 
 ### Módulo 4 — Roteamento
 
 ```bash
-# Ver tabela de rotas
 /ip route print
-
-# Rota estática de exemplo
-/ip route add dst-address=172.16.0.0/24 gateway=192.168.10.1
-
-# Verificar qual rota é usada
+/ip route add dst-address=172.16.0.0/24 gateway=10.99.0.254
 /ip route check 8.8.8.8
-
-# Diagnóstico
 /ping 8.8.8.8 count=4
 /tool traceroute 8.8.8.8
 ```
@@ -477,17 +497,17 @@ Seguir os módulos da apostila Opentech na ordem. **Sempre fazer backup antes de
 ### Módulo 6 — Firewall
 
 ```bash
-# INPUT — ordem importa, drop deve ser sempre a última regra
+# INPUT — drop deve ser sempre a última regra
 /ip firewall filter add chain=input connection-state=established,related action=accept comment=established
 /ip firewall filter add chain=input connection-state=invalid action=drop comment=invalid
 /ip firewall filter add chain=input protocol=icmp action=accept comment=icmp
-/ip firewall filter add chain=input src-address=192.168.10.0/24 action=accept comment=lan
+/ip firewall filter add chain=input src-address=192.168.10.0/24 action=accept comment=wan-access
+/ip firewall filter add chain=input src-address=10.99.0.0/24 action=accept comment=lan-access
 /ip firewall filter add chain=input action=drop comment=drop-all
 
-# NAT masquerade
-/ip firewall nat add chain=srcnat out-interface=ether3 action=masquerade
+# NAT — clientes da LAN acessam internet via ether1
+/ip firewall nat add chain=srcnat out-interface=ether1 action=masquerade
 
-# Verificar
 /ip firewall filter print
 /ip firewall nat print
 ```
@@ -495,10 +515,7 @@ Seguir os módulos da apostila Opentech na ordem. **Sempre fazer backup antes de
 ### Módulo 7 — QoS
 
 ```bash
-# Limitar cliente específico
-/queue simple add name=limite-lab target=192.168.10.101 max-limit=2M/5M
-
-# Estatísticas
+/queue simple add name=limite-lab target=10.99.0.100 max-limit=2M/5M
 /queue simple print stats
 ```
 
@@ -508,7 +525,7 @@ Seguir os módulos da apostila Opentech na ordem. **Sempre fazer backup antes de
 # PPPoE client
 /interface pppoe-client add \
   name=pppoe-wan \
-  interface=ether3 \
+  interface=ether1 \
   user=usuario \
   password=senha \
   disabled=no
@@ -521,21 +538,21 @@ Seguir os módulos da apostila Opentech na ordem. **Sempre fazer backup antes de
   password=vpnpass \
   disabled=no
 
-# Sessões ativas
 /ppp active print
 ```
 
 ### Ferramentas úteis durante o estudo
 
 ```bash
-/tool torch interface=ether3           # tráfego em tempo real
-/tool traceroute 8.8.8.8              # caminho até destino
-/log print follow                      # log ao vivo
-/log print where topics~"firewall"     # logs de firewall
-/ip firewall filter print              # regras com contadores
-/ip firewall connection print          # conexões ativas
-/system resource print                 # CPU, RAM, uptime
-/interface print stats                 # estatísticas por interface
+/tool torch interface=ether1           # tráfego WAN em tempo real
+/tool torch interface=ether2           # tráfego LAN em tempo real
+/tool traceroute 8.8.8.8
+/log print follow
+/log print where topics~"firewall"
+/ip firewall filter print
+/ip firewall connection print
+/system resource print
+/interface print stats
 ```
 
 ---
@@ -543,10 +560,38 @@ Seguir os módulos da apostila Opentech na ordem. **Sempre fazer backup antes de
 ### Referências
 
 - Apostila Opentech MTCNA — Fábio Bersan Rocha
+- Curso Udemy: Mikrotik do básico ao avançado v2026 — Vitor Mazuco
 - MikroTik Wiki: https://wiki.mikrotik.com
 - WinBox / CHR download: https://mikrotik.com/download
 - Forum MikroTik: https://forum.mikrotik.com
 
 ---
 
-*Documentação revisada em 29/03/2026 | lucasfelz*
+## 10. Histórico de Alterações
+
+### 30/03/2026 — Topologia final com duas interfaces
+
+**Alteração:** Adicionada segunda interface à VM do CHR para replicar o setup padrão ensinado nos cursos MikroTik (internet na ether1, LAN na ether2).
+
+| | Antes | Depois |
+|---|---|---|
+| Interfaces na VM | 1 (`net0 → vmbr2`) | 2 (`net0 → vmbr2`, `net1 → vmbr99`) |
+| ether1 | `192.168.10.200/24` (WAN) | `192.168.10.200/24` (WAN) |
+| ether2 | não existia | `10.99.0.1/24` (LAN isolada) |
+| Uso no curso | limitado — sem LAN separada | completo — replica setup dos cursos |
+
+**Comandos executados:**
+```bash
+# No Proxmox
+qm set 202 --net1 virtio,bridge=vmbr99
+qm stop 202 && qm start 202
+
+# No CHR
+/interface set 0 name=ether1
+/interface set 1 name=ether2
+/ip address add address=10.99.0.1/24 interface=ether2
+```
+
+---
+
+*Documentação revisada em 30/03/2026 | lucasfelz*
